@@ -1,0 +1,8 @@
+{
+  "name": "Teams Attendance Pro v2.0 (Teams App)",
+  "description": "Enterprise-grade attendance tracking with Geolocation, Approvals, and AI Assistant.",
+  "requestFramePermissions": [
+    "geolocation",
+    "microphone"
+  ]
+}
