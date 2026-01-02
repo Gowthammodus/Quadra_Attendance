@@ -32,6 +32,8 @@ export enum RequestType {
   PERMISSION = 'Permission',
   LOCATION_EXCEPTION = 'Location Exception',
   SHIFT_CHANGE = 'Shift Change',
+  LATE_CHECKIN = 'Late Check-In',
+  EARLY_CHECKOUT = 'Early Check-Out',
 }
 
 export enum RequestStatus {
@@ -122,6 +124,12 @@ export interface RequestItem {
   };
   shiftChangeDetails?: {
     requestedShift: ShiftConfig;
+  };
+  // New details for automated late/early requests
+  violationDetails?: {
+    actualTime: string;
+    expectedTime: string;
+    location: string;
   };
 }
 

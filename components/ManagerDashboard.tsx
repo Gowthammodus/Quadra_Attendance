@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../AppContext';
-import { Users, AlertTriangle, CheckCircle, Clock, Download, ArrowLeft, History, MapPin, MessageSquare, X, Send, Bell, AlertOctagon, LogIn, LogOut, ChevronLeft, ChevronRight, BarChart3, PieChart as PieChartIcon, Calendar, FileText, ChevronRight as ChevronRightIcon, TrendingUp } from 'lucide-react';
+import { Users, AlertTriangle, CheckCircle, Clock, Download, ArrowLeft, History, MapPin, MessageSquare, X, Send, Bell, AlertOctagon, LogIn, LogOut, ChevronLeft, ChevronRight, BarChart3, PieChart as PieChartIcon, Calendar, FileText, ChevronRight as ChevronRightIcon, TrendingUp, Navigation } from 'lucide-react';
 import { RequestStatus, RequestType, UserRole, LocationType } from '../types';
 import { VisualTimeline, AttendanceCalendar, formatDuration } from './SharedComponents';
 import { differenceInMinutes, format, addMonths, isSameMonth } from 'date-fns';
@@ -137,7 +137,6 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ view = 'dashboard' 
         const notifs = [];
         
         // 1. Escalations (Simulated for Demo)
-        // In real app, check for 3 consecutive absent days
         notifs.push({
             id: 'esc-1',
             type: 'escalation',
@@ -147,10 +146,9 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ view = 'dashboard' 
             urgent: true
         });
 
-        // 2. Missed Shift (Anyone not checked in by now)
+        // 2. Missed Shift
         const absentUsers = users.filter(u => !attendanceRecords.some(r => r.userId === u.id && r.date === todayStr));
         absentUsers.forEach(u => {
-            // Only show if it's past start time (mocking as true)
             notifs.push({
                 id: `abs-${u.id}`,
                 type: 'missed',
@@ -173,7 +171,7 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ view = 'dashboard' 
             });
         }
 
-        // 4. Check In/Out Activity (From today's records)
+        // 4. Check In/Out Activity
         attendanceRecords.filter(r => r.date === todayStr).forEach(r => {
             const u = users.find(user => user.id === r.userId);
             if (u) {
@@ -199,22 +197,16 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ view = 'dashboard' 
             }
         });
 
-        // Sort roughly by importance/recency (mock logic)
         return notifs.sort((a,b) => (a.urgent === b.urgent) ? 0 : a.urgent ? -1 : 1);
     };
 
     const renderMemberDetail = () => {
         if (!selectedUserId) return null;
         const user = users.find(u => u.id === selectedUserId);
-        
-        // Filter records for the selected user
         const allUserRecords = attendanceRecords.filter(r => r.userId === selectedUserId);
-        
-        // Filter for the VIEW DATE (Month selection)
         const displayedRecords = allUserRecords
             .filter(r => isSameMonth(new Date(r.date), viewDate))
             .sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-            
         const todayRecord = allUserRecords.find(r => r.date === todayStr);
 
         return (
@@ -293,7 +285,6 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ view = 'dashboard' 
                          </div>
                     </div>
                     <div>
-                         {/* Pass viewDate to the Calendar component */}
                          <AttendanceCalendar records={allUserRecords} currentDate={viewDate} />
                     </div>
                 </div>
@@ -302,7 +293,6 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ view = 'dashboard' 
     };
 
     const renderReports = () => {
-        // Mock Data for Reports based on Team Stats
         const CHART_DATA = [
             { name: 'Mon', Present: Math.floor(totalTeam * 0.9), Absent: Math.floor(totalTeam * 0.1), Late: 0 },
             { name: 'Tue', Present: Math.floor(totalTeam * 0.8), Absent: Math.floor(totalTeam * 0.2), Late: 1 },
@@ -310,7 +300,6 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ view = 'dashboard' 
             { name: 'Thu', Present: Math.floor(totalTeam * 0.85), Absent: Math.floor(totalTeam * 0.1), Late: 1 },
             { name: 'Fri', Present: Math.floor(totalTeam * 0.7), Absent: Math.floor(totalTeam * 0.3), Late: 2 },
         ];
-        
         const LOCATION_DATA = [
              { name: 'Office', value: 60 },
              { name: 'WFH', value: 30 },
@@ -326,7 +315,6 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ view = 'dashboard' 
                          <p className="text-sm text-gray-500">Weekly breakdown of attendance and location stats.</p>
                     </div>
                     <div className="flex flex-col sm:flex-row items-center gap-3">
-                        {/* Date Selection */}
                         <div className="flex items-center bg-gray-50 p-1.5 rounded-sm border border-gray-200">
                              <div className="px-2 text-gray-500"><Calendar size={14}/></div>
                              <input 
@@ -343,7 +331,6 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ view = 'dashboard' 
                                 className="bg-transparent border-none text-sm text-gray-700 focus:ring-0 p-1 outline-none"
                             />
                         </div>
-
                         <div className="flex space-x-2">
                             <button className="px-3 py-2 bg-white border border-gray-300 text-gray-700 text-sm font-medium rounded-sm hover:bg-gray-50 flex items-center">
                                 <Download size={16} className="mr-2"/> Export CSV
@@ -379,22 +366,12 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ view = 'dashboard' 
                             </ResponsiveContainer>
                         </div>
                     </div>
-
                     <div className="bg-white p-6 rounded-md shadow-sm border border-gray-200">
                         <h3 className="font-semibold text-gray-800 mb-6">Location Distribution</h3>
                         <div className="h-64 flex justify-center items-center">
                              <ResponsiveContainer width="100%" height="100%">
                                 <PieChart>
-                                    <Pie
-                                        data={LOCATION_DATA}
-                                        cx="50%"
-                                        cy="50%"
-                                        innerRadius={60}
-                                        outerRadius={80}
-                                        fill="#8884d8"
-                                        paddingAngle={5}
-                                        dataKey="value"
-                                    >
+                                    <Pie data={LOCATION_DATA} cx="50%" cy="50%" innerRadius={60} outerRadius={80} fill="#8884d8" paddingAngle={5} dataKey="value">
                                         {LOCATION_DATA.map((entry, index) => (
                                             <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                                         ))}
@@ -420,7 +397,6 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ view = 'dashboard' 
                 <div className="p-6 border-b border-gray-100 flex justify-between items-center bg-gray-50">
                     <div className="flex items-center space-x-4">
                         <h3 className="font-semibold text-gray-800">Pending Requests</h3>
-                        {/* Date Filter */}
                         <div className="flex items-center bg-white border border-gray-200 rounded-sm px-2 py-1">
                             <Calendar size={14} className="text-gray-400 mr-2"/>
                             <input 
@@ -453,86 +429,55 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ view = 'dashboard' 
                                                     req.type === RequestType.REGULARIZATION ? 'bg-blue-100 text-blue-700' : 
                                                     req.type === RequestType.LOCATION_EXCEPTION ? 'bg-blue-100 text-blue-700' :
                                                     req.type === RequestType.SHIFT_CHANGE ? 'bg-purple-100 text-purple-700' :
+                                                    req.type === RequestType.LATE_CHECKIN || req.type === RequestType.EARLY_CHECKOUT ? 'bg-red-100 text-red-700 border border-red-200' :
                                                     'bg-green-100 text-green-700'
                                                 }`}>
                                                     {req.type}
                                                 </span>
-                                                {req.employeeResponse && (
-                                                    <span className="bg-yellow-100 text-yellow-800 text-[10px] px-2 py-0.5 rounded font-bold">
-                                                        Response Received
-                                                    </span>
-                                                )}
                                             </div>
                                             <p className="text-sm text-gray-500 mt-1">{req.startDate}</p>
                                             
-                                            {req.type === RequestType.SHIFT_CHANGE && req.shiftChangeDetails && (
-                                                <div className="mt-2 text-xs bg-purple-50 p-2 rounded text-purple-800 border border-purple-100">
-                                                    <p className="flex items-center font-semibold"><TrendingUp size={12} className="mr-1"/> Requested Shift: {req.shiftChangeDetails.requestedShift.name}</p>
-                                                    <p>Time: {req.shiftChangeDetails.requestedShift.startTime} - {req.shiftChangeDetails.requestedShift.endTime}</p>
+                                            {/* Feature 3: Enhanced Violation Details */}
+                                            {req.violationDetails && (
+                                                <div className="mt-3 grid grid-cols-2 gap-4 bg-gray-50 p-3 rounded border border-gray-200">
+                                                    <div>
+                                                        <p className="text-[10px] text-gray-500 font-bold uppercase">Actual Time</p>
+                                                        <p className="text-sm font-bold text-red-600">{req.violationDetails.actualTime}</p>
+                                                    </div>
+                                                    <div>
+                                                        <p className="text-[10px] text-gray-500 font-bold uppercase">Expected</p>
+                                                        <p className="text-sm font-bold text-gray-700">{req.violationDetails.expectedTime}</p>
+                                                    </div>
+                                                    <div className="col-span-2 flex items-start space-x-2 pt-1 border-t border-gray-100 mt-1">
+                                                        <Navigation size={12} className="text-gray-400 mt-0.5"/>
+                                                        <p className="text-[11px] text-gray-600 italic leading-snug">
+                                                            Detected at: {req.violationDetails.location}
+                                                        </p>
+                                                    </div>
                                                 </div>
                                             )}
 
-                                            {req.type === RequestType.REGULARIZATION && req.regularizationDetails && (
-                                                <div className="mt-2 text-xs bg-blue-50 p-2 rounded text-blue-800 border border-blue-100">
-                                                    <p><span className="font-semibold">Correction:</span> {req.regularizationDetails.checkInTime} - {req.regularizationDetails.checkOutTime}</p>
-                                                    <p><span className="font-semibold">Location:</span> {req.regularizationDetails.location}</p>
-                                                </div>
-                                            )}
-
-                                            {req.type === RequestType.PERMISSION && req.permissionDetails && (
-                                                 <div className="mt-2 text-xs bg-green-50 p-2 rounded text-green-800 border border-green-100">
-                                                    <p><span className="font-semibold">Duration:</span> {req.permissionDetails.startTime} - {req.permissionDetails.endTime}</p>
-                                                </div>
-                                            )}
-                                            
-                                            {req.type === RequestType.LOCATION_EXCEPTION && req.locationExceptionDetails && (
-                                                <div className="mt-2 text-xs bg-blue-50 p-2 rounded text-blue-800 border border-blue-100">
-                                                    <p className="flex items-center"><MapPin size={12} className="mr-1"/> Exception: {req.locationExceptionDetails.locationType}</p>
-                                                    {req.locationExceptionDetails.duration && <p>Duration: {req.locationExceptionDetails.duration}</p>}
-                                                </div>
-                                            )}
-
-                                            {req.managerNotes && (
-                                                <div className="mt-2 pl-2 border-l-2 border-yellow-300 text-xs text-gray-600">
-                                                    <p className="font-medium">You requested info:</p>
-                                                    <p>"{req.managerNotes}"</p>
-                                                </div>
-                                            )}
-                                            
-                                            {req.employeeResponse ? (
-                                                 <div className="mt-2 pl-2 border-l-2 border-blue-300 text-xs text-gray-600 bg-blue-50/50 p-1 rounded-r">
-                                                    <p className="font-medium text-blue-700">Employee Reply:</p>
-                                                    <p>"{req.employeeResponse}"</p>
-                                                </div>
-                                            ) : (
-                                                <p className="text-xs text-gray-400 mt-2 italic">"{req.reason}"</p>
-                                            )}
+                                            <div className="mt-3">
+                                                <p className="text-xs text-gray-400 font-bold uppercase mb-1">Reason provided</p>
+                                                <p className="text-sm text-gray-700 italic bg-white p-2 rounded border border-gray-100 shadow-inner">"{req.reason}"</p>
+                                            </div>
                                         </div>
-                                        <div className="flex flex-col space-y-2 ml-4 min-w-[100px]">
-                                            
+                                        <div className="flex flex-col space-y-2 ml-4 min-w-[120px]">
                                             <button 
-                                                onClick={() => {
-                                                    if (req.type === RequestType.SHIFT_CHANGE) {
-                                                        managerApproveShiftChange(req.id);
-                                                    } else {
-                                                        approveRequest(req.id);
-                                                    }
-                                                }}
-                                                className="px-3 py-1 bg-green-600 text-white text-xs font-medium rounded-sm hover:bg-green-700 w-full"
+                                                onClick={() => req.type === RequestType.SHIFT_CHANGE ? managerApproveShiftChange(req.id) : approveRequest(req.id)}
+                                                className="px-3 py-1.5 bg-green-600 text-white text-xs font-bold rounded hover:bg-green-700 shadow-sm"
                                             >
-                                                {req.type === RequestType.SHIFT_CHANGE ? "Recommend to HR" : "Approve"}
+                                                Approve
                                             </button>
-
                                             <button 
                                                 onClick={() => initiateRequestInfo(req.id)}
-                                                className="px-3 py-1 bg-yellow-100 text-yellow-800 text-xs font-medium rounded-sm hover:bg-yellow-200 border border-yellow-200 w-full"
+                                                className="px-3 py-1.5 bg-white border border-yellow-300 text-yellow-800 text-xs font-bold rounded hover:bg-yellow-50"
                                             >
                                                 Request Info
                                             </button>
-                                            
                                             <button 
                                                 onClick={() => rejectRequest(req.id)}
-                                                className="px-3 py-1 bg-white border border-gray-300 text-gray-700 text-xs font-medium rounded-sm hover:bg-gray-50 w-full"
+                                                className="px-3 py-1.5 bg-white border border-gray-300 text-gray-700 text-xs font-bold rounded hover:bg-gray-50"
                                             >
                                                 Reject
                                             </button>
@@ -645,42 +590,31 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ view = 'dashboard' 
 
     const renderDashboard = () => (
         <div className="space-y-6">
-             {/* Banner */}
             <div className="bg-indigo-50 border border-indigo-100 rounded-md p-6">
                 <h2 className="text-indigo-900 font-bold text-lg">
                     Manager Overview: <span className="font-normal text-indigo-700">Team performance and approvals.</span>
                 </h2>
             </div>
-
-             {/* Stats Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <StatCard title="Total Team" value={totalTeam} icon={<Users size={20} className="text-indigo-500"/>} trend="+2 new" />
                 <StatCard title="Present Today" value={presentToday} icon={<CheckCircle size={20} className="text-green-500"/>} trend="92% Rate" />
                 <StatCard title="On Leave" value={onLeave} icon={<Clock size={20} className="text-orange-500"/>} trend="Low" />
                 <StatCard title="Pending Approvals" value={pendingRequests.length} icon={<AlertTriangle size={20} className="text-sky-500"/>} trend="Action Needed" />
             </div>
-
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* Main: Approvals */}
                 <div className="lg:col-span-2">
                     {renderApprovals()}
                 </div>
-                
-                {/* Right: Notifications & Team Status */}
                 <div className="space-y-6">
                     {renderNotifications()}
                     {renderTeamList()}
                 </div>
             </div>
-
-             {/* Personal Attendance & Quick Actions (Moved to Bottom) */}
              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {/* Clock & Check-In */}
                 <div className="bg-white p-8 rounded-md shadow-sm border border-gray-200 text-center relative overflow-hidden">
                     <div className="h-1 bg-[#6264A7] absolute top-0 left-0 w-full"></div>
                     <h2 className="text-4xl font-light text-gray-800 mb-1">{format(currentTime, 'hh:mm a')}</h2>
                     <p className="text-gray-500 mb-8">{format(currentTime, 'EEEE, MMMM d, yyyy')}</p>
-                    
                     {isCheckedIn ? (
                         <div className="max-w-xs mx-auto">
                             <div className="flex items-center justify-center text-green-600 mb-4 bg-green-50 py-2 rounded">
@@ -699,8 +633,6 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ view = 'dashboard' 
                         </div>
                     )}
                 </div>
-
-                {/* Quick Actions */}
                 <div className="bg-white p-6 rounded-md shadow-sm border border-gray-200 flex flex-col justify-between">
                     <div>
                         <h3 className="font-semibold text-gray-800 mb-4">Quick Actions</h3>
@@ -720,8 +652,6 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ view = 'dashboard' 
                         </div>
                     </div>
                 </div>
-
-                {/* Personal Leave Balance */}
                 <div className="bg-white p-6 rounded-md shadow-sm border border-gray-200 flex flex-col justify-center">
                     <h3 className="font-semibold text-gray-800 mb-4">My Leave Balance</h3>
                     <div className="flex justify-between text-center">
@@ -734,17 +664,14 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ view = 'dashboard' 
         </div>
     );
 
-    // --- Personal Modal Render (Check-In / Request) ---
     const renderPersonalModal = () => {
         if (!showLeaveModal && !showCheckInModal) return null;
-        
         const isCheckIn = showCheckInModal;
         const title = isCheckIn ? "Check In" : "New Request";
 
         return (
             <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-[1px]">
                 <div className="bg-white w-full max-w-2xl shadow-2xl rounded-sm overflow-hidden flex flex-col max-h-[90vh]">
-                    {/* Header */}
                     <div className="flex justify-between items-center p-5 border-b border-gray-200">
                         <div className="flex items-center space-x-3">
                              <div className="bg-[#6264A7] p-1.5 rounded-sm">
@@ -752,12 +679,8 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ view = 'dashboard' 
                              </div>
                              <h3 className="text-xl font-bold text-gray-800">{title}</h3>
                         </div>
-                        <button onClick={closePersonalModal} className="text-gray-400 hover:text-gray-600">
-                            <X size={24} />
-                        </button>
+                        <button onClick={closePersonalModal} className="text-gray-400 hover:text-gray-600"><X size={24} /></button>
                     </div>
-
-                    {/* Content */}
                     <div className="p-6 overflow-y-auto space-y-6">
                         {isCheckIn ? (
                             <div className="grid grid-cols-2 gap-x-8 gap-y-5">
@@ -767,11 +690,7 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ view = 'dashboard' 
                                 </div>
                                 <div className="col-span-2">
                                     <label className="block text-xs font-semibold text-gray-500 mb-1">Work Location</label>
-                                    <select 
-                                        value={locationType} 
-                                        onChange={(e) => setLocationType(e.target.value as LocationType)} 
-                                        className="w-full bg-gray-50 border border-gray-200 rounded-[3px] px-3 py-2 text-sm focus:ring-1 focus:ring-[#6264A7] focus:border-[#6264A7] outline-none"
-                                    >
+                                    <select value={locationType} onChange={(e) => setLocationType(e.target.value as LocationType)} className="w-full bg-gray-50 border border-gray-200 rounded-[3px] px-3 py-2 text-sm focus:ring-1 focus:ring-[#6264A7] outline-none">
                                         <option value={LocationType.OFFICE}>Office</option>
                                         <option value={LocationType.HOME}>Home</option>
                                         <option value={LocationType.CUSTOMER_SITE}>Customer Site</option>
@@ -780,64 +699,15 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ view = 'dashboard' 
                             </div>
                         ) : (
                             <div className="grid grid-cols-2 gap-x-8 gap-y-5">
-                                <div className="col-span-2">
-                                    <label className="block text-xs font-semibold text-gray-500 mb-1">Request Type</label>
-                                    <select
-                                        value={requestType}
-                                        onChange={(e) => setRequestType(e.target.value as RequestType)}
-                                        className="w-full bg-gray-50 border border-gray-200 rounded-[3px] px-3 py-2 text-sm focus:ring-1 focus:ring-[#6264A7] focus:border-[#6264A7] outline-none"
-                                    >
-                                        <option value={RequestType.PERMISSION}>{RequestType.PERMISSION}</option>
-                                        <option value={RequestType.LEAVE}>{RequestType.LEAVE}</option>
-                                        <option value={RequestType.REGULARIZATION}>{RequestType.REGULARIZATION}</option>
-                                        <option value={RequestType.LOCATION_EXCEPTION}>{RequestType.LOCATION_EXCEPTION}</option>
-                                    </select>
-                                </div>
-                                
-                                <div>
-                                    <label className="block text-xs font-semibold text-gray-500 mb-1">Start Date</label>
-                                    <div className="relative">
-                                        <input 
-                                            type="date" 
-                                            value={leaveStartDate} 
-                                            onChange={(e) => setLeaveStartDate(e.target.value)}
-                                            className="w-full bg-gray-50 border border-gray-200 rounded-[3px] px-3 py-2 text-sm focus:ring-1 focus:ring-[#6264A7] outline-none"
-                                        />
-                                    </div>
-                                </div>
-                                
-                                <div>
-                                    <label className="block text-xs font-semibold text-gray-500 mb-1">Duration</label>
-                                    <select 
-                                        value={duration} 
-                                        onChange={(e) => setDuration(e.target.value)} 
-                                        className="w-full bg-gray-50 border border-gray-200 rounded-[3px] px-3 py-2 text-sm focus:ring-1 focus:ring-[#6264A7] focus:border-[#6264A7] outline-none"
-                                    >
-                                        {DURATION_OPTIONS.map(opt => (
-                                            <option key={opt} value={opt}>{opt}</option>
-                                        ))}
-                                    </select>
-                                </div>
-
-                                <div className="col-span-2">
-                                    <label className="block text-xs font-semibold text-gray-500 mb-1">Reason / Remarks</label>
-                                    <textarea 
-                                        value={leaveReason} 
-                                        onChange={(e) => setLeaveReason(e.target.value)}
-                                        placeholder="Enter reason..." 
-                                        className="w-full bg-gray-50 border border-gray-200 rounded-[3px] px-3 py-2 text-sm h-24 resize-none focus:ring-1 focus:ring-[#6264A7] outline-none"
-                                    ></textarea>
-                                </div>
+                                <div className="col-span-2"><label className="block text-xs font-semibold text-gray-500 mb-1">Request Type</label><select value={requestType} onChange={(e) => setRequestType(e.target.value as RequestType)} className="w-full bg-gray-50 border border-gray-200 rounded-[3px] px-3 py-2 text-sm focus:ring-1 focus:ring-[#6264A7] outline-none"><option value={RequestType.PERMISSION}>{RequestType.PERMISSION}</option><option value={RequestType.LEAVE}>{RequestType.LEAVE}</option><option value={RequestType.REGULARIZATION}>{RequestType.REGULARIZATION}</option><option value={RequestType.LOCATION_EXCEPTION}>{RequestType.LOCATION_EXCEPTION}</option></select></div>
+                                <div><label className="block text-xs font-semibold text-gray-500 mb-1">Start Date</label><div className="relative"><input type="date" value={leaveStartDate} onChange={(e) => setLeaveStartDate(e.target.value)} className="w-full bg-gray-50 border border-gray-200 rounded-[3px] px-3 py-2 text-sm focus:ring-1 focus:ring-[#6264A7] outline-none"/></div></div>
+                                <div><label className="block text-xs font-semibold text-gray-500 mb-1">Duration</label><select value={duration} onChange={(e) => setDuration(e.target.value)} className="w-full bg-gray-50 border border-gray-200 rounded-[3px] px-3 py-2 text-sm focus:ring-1 focus:ring-[#6264A7] outline-none">{DURATION_OPTIONS.map(opt => (<option key={opt} value={opt}>{opt}</option>))}</select></div>
+                                <div className="col-span-2"><label className="block text-xs font-semibold text-gray-500 mb-1">Reason / Remarks</label><textarea value={leaveReason} onChange={(e) => setLeaveReason(e.target.value)} placeholder="Enter reason..." className="w-full bg-gray-50 border border-gray-200 rounded-[3px] px-3 py-2 text-sm h-24 resize-none focus:ring-1 focus:ring-[#6264A7] outline-none"></textarea></div>
                             </div>
                         )}
                     </div>
-
-                    {/* Footer */}
                     <div className="p-5 border-t border-gray-200 flex justify-end bg-white">
-                        <button 
-                            onClick={isCheckIn ? confirmCheckIn : submitPersonalRequest}
-                            className="bg-[#6264A7] hover:bg-[#51538f] text-white font-semibold py-2 px-8 rounded-[3px] text-sm transition-colors shadow-sm"
-                        >
+                        <button onClick={isCheckIn ? confirmCheckIn : submitPersonalRequest} className="bg-[#6264A7] hover:bg-[#51538f] text-white font-semibold py-2 px-8 rounded-[3px] text-sm transition-colors shadow-sm">
                             {isCheckIn ? "Check In" : "Submit"}
                         </button>
                     </div>
@@ -853,11 +723,7 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ view = 'dashboard' 
             {localView === 'approvals' && renderApprovals()}
             {localView === 'reports' && renderReports()}
             {(localView as any) === 'member_detail' && renderMemberDetail()}
-            
-            {/* Modals */}
             {renderPersonalModal()}
-
-            {/* Request Info Modal */}
             {showInfoModal && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-fade-in">
                     <div className="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
@@ -874,7 +740,7 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ view = 'dashboard' 
                             <textarea
                                 value={infoNote}
                                 onChange={(e) => setInfoNote(e.target.value)}
-                                className="w-full border-gray-300 rounded-sm p-2.5 bg-gray-50 text-sm focus:ring-yellow-500 focus:border-yellow-500"
+                                className="w-full border-gray-300 rounded-sm p-2.5 bg-gray-50 text-sm focus:ring-yellow-500 focus:border-yellow-500 outline-none"
                                 rows={4}
                                 placeholder="e.g. Please explain why you need to leave early, or provide proof of appointment."
                             ></textarea>
