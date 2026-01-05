@@ -50,6 +50,11 @@ export interface ShiftConfig {
   endTime: string;   // e.g., "18:00"
 }
 
+export interface ShiftAssignment {
+  date: string;
+  shift: ShiftConfig;
+}
+
 export interface User {
   id: string;
   name: string;
@@ -124,6 +129,8 @@ export interface RequestItem {
   };
   shiftChangeDetails?: {
     requestedShift: ShiftConfig;
+    targetDates?: string[];
+    assignments?: ShiftAssignment[];
   };
   // New details for automated late/early requests
   violationDetails?: {

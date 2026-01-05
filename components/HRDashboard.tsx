@@ -26,9 +26,28 @@ const HRDashboard: React.FC<HRDashboardProps> = ({ view = 'dashboard' }) => {
     // Edit Shift Modal State
     const [showShiftModal, setShowShiftModal] = useState(false);
     const [shiftEditUserId, setShiftEditUserId] = useState<string | null>(null);
-    const [shiftName, setShiftName] = useState("");
-    const [shiftStart, setShiftStart] = useState("");
-    const [shiftEnd, setShiftEnd] = useState("");
+    const [shiftName, setShiftName] = useState('');
+    const [shiftStart, setShiftStart] = useState('09:00');
+    const [shiftEnd, setShiftEnd] = useState('18:00');
+
+
+    // === MULTI-SHIFT CHANGE START ===
+interface ShiftAssignment {
+  date: string;
+  shift: {
+    name: string;
+    startTime: string;
+    endTime: string;
+  };
+}
+
+const [modalAssignments, setModalAssignments] = useState<ShiftAssignment[]>([]);
+const [tempDate, setTempDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+const [tempShiftName, setTempShiftName] = useState("General Shift A");
+const [tempStart, setTempStart] = useState("09:00");
+const [tempEnd, setTempEnd] = useState("18:00");
+// === MULTI-SHIFT CHANGE END ===
+
 
     // Create Shift State
     const [showCreateShiftModal, setShowCreateShiftModal] = useState(false);
@@ -174,13 +193,97 @@ const HRDashboard: React.FC<HRDashboardProps> = ({ view = 'dashboard' }) => {
         setLocalView('member_detail' as any);
     };
 
-    const openShiftModal = (user: any) => {
-        setShiftEditUserId(user.id);
-        setShiftName(user.shift?.name || "General Shift");
-        setShiftStart(user.shift?.startTime || "09:00");
-        setShiftEnd(user.shift?.endTime || "18:00");
-        setShowShiftModal(true);
+   // === MULTI-SHIFT CHANGE START ===
+const openShiftModal = (user: any) => {
+  setShiftEditUserId(user.id);
+  setModalAssignments([]);
+  setShowShiftModal(true);
+};
+// === MULTI-SHIFT CHANGE END ===
+
+// 👇 ADD THIS RIGHT HERE
+const applyManagerRecommendation = () => {
+  const managerReq = requests.find(
+    r =>
+      r.userId === shiftEditUserId &&
+      r.type === RequestType.SHIFT_CHANGE &&
+      r.status === RequestStatus.MANAGER_APPROVED
+  );
+
+  if (!managerReq?.shiftChangeDetails?.assignments) return;
+
+  setModalAssignments(
+    managerReq.shiftChangeDetails.assignments.map(a => ({
+      date: a.date,
+      shift: {
+        name: a.shift.name,
+        startTime: a.shift.startTime,
+        endTime: a.shift.endTime
+      }
+    }))
+  );
+};
+// === MULTI-SHIFT CHANGE END ===
+
+
+    const handleShiftSelect = (name: string) => {
+        setShiftName(name);
+        const template = shiftTemplates.find(t => t.name === name);
+        if (template) {
+            setShiftStart(template.startTime);
+            setShiftEnd(template.endTime);
+        }
     };
+
+    // === MULTI-SHIFT CHANGE START ===
+const handleTempShiftSelect = (name: string) => {
+  setTempShiftName(name);
+  const template = shiftTemplates.find(t => t.name === name);
+  if (template) {
+    setTempStart(template.startTime);
+    setTempEnd(template.endTime);
+  }
+};
+
+const addAssignmentToModal = () => {
+  if (modalAssignments.some(a => a.date === tempDate)) {
+    alert("Shift already exists for this date");
+    return;
+  }
+
+  setModalAssignments(prev =>
+    [...prev, {
+      date: tempDate,
+      shift: {
+        name: tempShiftName,
+        startTime: tempStart,
+        endTime: tempEnd
+      }
+    }].sort((a, b) => a.date.localeCompare(b.date))
+  );
+};
+
+const saveBulkShifts = () => {
+  if (!shiftEditUserId || modalAssignments.length === 0) return;
+
+  const managerReq = requests.find(
+    r =>
+      r.userId === shiftEditUserId &&
+      r.type === RequestType.SHIFT_CHANGE &&
+      r.status === RequestStatus.MANAGER_APPROVED
+  );
+
+  if (managerReq) {
+    finalizeShiftChange(managerReq.id);
+  } else {
+    const latestShift = modalAssignments[modalAssignments.length - 1].shift;
+    updateUserShift(shiftEditUserId, latestShift);
+  }
+
+  setShowShiftModal(false);
+};
+// === MULTI-SHIFT CHANGE END ===
+
 
     const saveShift = () => {
         if (shiftEditUserId && shiftName && shiftStart && shiftEnd) {
@@ -211,7 +314,6 @@ const HRDashboard: React.FC<HRDashboardProps> = ({ view = 'dashboard' }) => {
     };
 
     const handleSaveRequestEdit = (reqId: string) => {
-        // Logic to save the edited request would go here
         setEditRequestId(null);
     };
 
@@ -337,9 +439,25 @@ const HRDashboard: React.FC<HRDashboardProps> = ({ view = 'dashboard' }) => {
                                         <p className="text-sm text-gray-500 mt-1">{req.startDate}</p>
                                         
                                         {req.type === RequestType.SHIFT_CHANGE && req.shiftChangeDetails && (
-                                            <div className="mt-2 text-xs bg-purple-50 p-2 rounded text-purple-800 border border-purple-100">
-                                                <p className="flex items-center font-semibold"><TrendingUp size={12} className="mr-1"/> Requested Shift: {req.shiftChangeDetails.requestedShift.name}</p>
-                                                <p>Time: {req.shiftChangeDetails.requestedShift.startTime} - {req.shiftChangeDetails.requestedShift.endTime}</p>
+                                            <div className="mt-3 space-y-2">
+                                                {req.shiftChangeDetails.assignments ? (
+                                                    <div className="bg-purple-50 p-3 rounded-md border border-purple-100">
+                                                        <p className="text-[10px] font-bold text-purple-700 uppercase mb-2">Requested Date-Shift Mapping</p>
+                                                        <div className="space-y-1.5">
+                                                            {req.shiftChangeDetails.assignments.map(item => (
+                                                                <div key={item.date} className="flex justify-between text-xs border-b border-purple-200/50 pb-1 last:border-0 last:pb-0">
+                                                                    <span className="text-gray-600">{item.date}</span>
+                                                                    <span className="font-bold text-purple-900">{item.shift.name} ({item.shift.startTime}-{item.shift.endTime})</span>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <div className="bg-purple-50 p-2 rounded text-purple-800 border border-purple-100 text-xs">
+                                                        <p className="flex items-center font-semibold"><TrendingUp size={12} className="mr-1"/> Requested Shift: {req.shiftChangeDetails.requestedShift.name}</p>
+                                                        <p>Time: {req.shiftChangeDetails.requestedShift.startTime} - {req.shiftChangeDetails.requestedShift.endTime}</p>
+                                                    </div>
+                                                )}
                                             </div>
                                         )}
 
@@ -349,14 +467,14 @@ const HRDashboard: React.FC<HRDashboardProps> = ({ view = 'dashboard' }) => {
                                         {req.type === RequestType.SHIFT_CHANGE && req.status === RequestStatus.MANAGER_APPROVED ? (
                                             <button 
                                                 onClick={() => finalizeShiftChange(req.id)}
-                                                className="px-3 py-1 bg-[#6264A7] text-white text-xs font-bold rounded-sm hover:bg-[#51538f] w-full flex items-center justify-center"
+                                                className="px-3 py-1.5 bg-[#6264A7] text-white text-xs font-bold rounded hover:bg-[#51538f] w-full flex items-center justify-center shadow-sm"
                                             >
                                                 <Settings size={12} className="mr-1"/> Complete Shift Update
                                             </button>
                                         ) : (
                                             <button 
                                                 onClick={() => approveRequest(req.id)}
-                                                className="px-3 py-1 bg-green-600 text-white text-xs font-medium rounded-sm hover:bg-green-700 w-full"
+                                                className="px-3 py-1.5 bg-green-600 text-white text-xs font-medium rounded hover:bg-green-700 w-full"
                                             >
                                                 Approve
                                             </button>
@@ -364,7 +482,7 @@ const HRDashboard: React.FC<HRDashboardProps> = ({ view = 'dashboard' }) => {
                                         
                                         <button 
                                             onClick={() => rejectRequest(req.id)}
-                                            className="px-3 py-1 bg-white border border-gray-300 text-gray-700 text-xs font-medium rounded-sm hover:bg-gray-50 w-full"
+                                            className="px-3 py-1.5 bg-white border border-gray-300 text-gray-700 text-xs font-medium rounded hover:bg-gray-50 w-full"
                                         >
                                             Reject
                                         </button>
@@ -432,7 +550,6 @@ const HRDashboard: React.FC<HRDashboardProps> = ({ view = 'dashboard' }) => {
 
     // 2. See every check-in and check-out record with location
     const renderAttendanceLogs = () => {
-        // Iterate through ALL users to ensure everyone appears in the list
         const filteredUsers = users.filter(u => 
             u.name.toLowerCase().includes(searchTerm.toLowerCase())
         );
@@ -552,7 +669,6 @@ const HRDashboard: React.FC<HRDashboardProps> = ({ view = 'dashboard' }) => {
 
     // 4. Track all leave and permission requests company-wide
     const renderGlobalRequests = () => {
-         // Show history and pending
          const filteredRequests = requests.filter(r => 
              r.userName.toLowerCase().includes(searchTerm.toLowerCase())
          ).sort((a,b) => new Date(b.appliedOn).getTime() - new Date(a.appliedOn).getTime());
@@ -573,13 +689,18 @@ const HRDashboard: React.FC<HRDashboardProps> = ({ view = 'dashboard' }) => {
                     <tbody className="divide-y divide-gray-200 text-sm">
                          {filteredRequests.map(req => {
                              const isEditing = editRequestId === req.id;
+                             const isShiftChange = req.type === RequestType.SHIFT_CHANGE;
+                             const canFinalize = isShiftChange && req.status === RequestStatus.MANAGER_APPROVED;
+
                              return (
                                  <tr key={req.id} className={`hover:bg-gray-50 ${isEditing ? 'bg-blue-50/50' : ''}`}>
                                      <td className="py-3 px-4 font-medium text-gray-900 border border-gray-200">{req.userName}</td>
                                      <td className="py-3 px-4 border border-gray-200">
                                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
                                             req.type === RequestType.LEAVE ? 'bg-orange-100 text-orange-700' :
-                                            req.type === RequestType.REGULARIZATION ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'
+                                            req.type === RequestType.REGULARIZATION ? 'bg-blue-100 text-blue-700' :
+                                            req.type === RequestType.SHIFT_CHANGE ? 'bg-purple-100 text-purple-700' :
+                                            'bg-green-100 text-green-700'
                                         }`}>{req.type}</span>
                                      </td>
                                      <td className="py-3 px-4 text-gray-500 border border-gray-200">{req.appliedOn}</td>
@@ -592,16 +713,25 @@ const HRDashboard: React.FC<HRDashboardProps> = ({ view = 'dashboard' }) => {
                                                  <option>{RequestStatus.PENDING}</option>
                                                  <option>{RequestStatus.APPROVED}</option>
                                                  <option>{RequestStatus.REJECTED}</option>
+                                                 <option>{RequestStatus.MANAGER_APPROVED}</option>
                                              </select>
                                          ) : (
                                              <span className={`px-2 py-0.5 rounded text-xs font-medium ${
                                                  req.status === 'Approved' ? 'bg-green-100 text-green-800' :
-                                                 req.status === 'Rejected' ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800'
+                                                 req.status === 'Rejected' ? 'bg-red-100 text-red-800' :
+                                                 req.status === 'Manager Approved' ? 'bg-purple-100 text-purple-800' :
+                                                 'bg-yellow-100 text-yellow-800'
                                              }`}>{req.status}</span>
                                          )}
                                      </td>
-                                     <td className="py-3 px-4 text-gray-500 text-xs truncate max-w-xs border border-gray-200" title={req.reason}>
-                                         {req.reason}
+                                     <td className="py-3 px-4 text-gray-500 text-xs border border-gray-200">
+                                         {isShiftChange && req.shiftChangeDetails?.assignments ? (
+                                             <div className="max-w-[200px] truncate" title={req.shiftChangeDetails.assignments.map(a => `${a.date}: ${a.shift.name}`).join(', ')}>
+                                                 {req.shiftChangeDetails.assignments.length} assignments
+                                             </div>
+                                         ) : (
+                                             <div className="truncate max-w-[200px]" title={req.reason}>{req.reason}</div>
+                                         )}
                                      </td>
                                      <td className="py-3 px-4 border border-gray-200">
                                          <div className="flex items-center space-x-2">
@@ -612,11 +742,19 @@ const HRDashboard: React.FC<HRDashboardProps> = ({ view = 'dashboard' }) => {
                                                  </>
                                              ) : (
                                                  <>
-                                                     {req.status === RequestStatus.PENDING && (
-                                                         <>
-                                                             <button onClick={() => approveRequest(req.id)} className="text-green-600 hover:text-green-800" title="Approve"><CheckCircle size={16}/></button>
-                                                             <button onClick={() => rejectRequest(req.id)} className="text-red-600 hover:text-red-800" title="Reject"><X size={16}/></button>
-                                                         </>
+                                                     {canFinalize ? (
+                                                         <button 
+                                                            onClick={() => finalizeShiftChange(req.id)} 
+                                                            className="text-[#6264A7] hover:text-[#51538f] font-bold text-xs bg-indigo-50 px-2 py-1 rounded flex items-center border border-indigo-200"
+                                                            title="HR Privilege Finalize"
+                                                         >
+                                                             <Settings size={12} className="mr-1"/> Finalize
+                                                         </button>
+                                                     ) : req.status === RequestStatus.PENDING && (
+                                                         <button onClick={() => approveRequest(req.id)} className="text-green-600 hover:text-green-800" title="Approve"><CheckCircle size={16}/></button>
+                                                     )}
+                                                     {req.status !== RequestStatus.APPROVED && req.status !== RequestStatus.REJECTED && (
+                                                         <button onClick={() => rejectRequest(req.id)} className="text-red-600 hover:text-red-800" title="Reject"><X size={16}/></button>
                                                      )}
                                                      <button onClick={() => setEditRequestId(req.id)} className="text-indigo-600 hover:text-indigo-800" title="Edit"><Edit3 size={16}/></button>
                                                  </>
@@ -674,7 +812,7 @@ const HRDashboard: React.FC<HRDashboardProps> = ({ view = 'dashboard' }) => {
                             {blockedUsers.length === 0 ? <p className="text-gray-400 text-sm">No blocked users.</p> : (
                                 <ul className="space-y-2">
                                     {blockedUsers.map(u => (
-                                        <li key={u.id} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg border border-gray-100">
+                                        <li key={u.id} className="flex justify-between items-center p-3 bg-gray-50 rounded-lg border border-red-100">
                                             <div className="flex items-center space-x-2">
                                                 <div className="relative">
                                                     <img src={u.avatar} className="w-8 h-8 rounded-full grayscale opacity-50" alt=""/>
@@ -740,7 +878,7 @@ const HRDashboard: React.FC<HRDashboardProps> = ({ view = 'dashboard' }) => {
             { day: 'Wed', Present: 44, Absent: 1 },
             { day: 'Thu', Present: 41, Absent: 4 },
             { day: 'Fri', Present: 38, Absent: 7 },
-            { day: 'Sat', Present: 20, Absent: 25 }, // Half day maybe
+            { day: 'Sat', Present: 20, Absent: 25 },
         ];
 
         const DEPT_DATA = [
@@ -762,7 +900,6 @@ const HRDashboard: React.FC<HRDashboardProps> = ({ view = 'dashboard' }) => {
             <div className="p-6 space-y-8">
                 <h3 className="font-bold text-gray-800 text-lg">Generate Detailed Reports</h3>
                 
-                {/* Filters */}
                 <div className="bg-white p-6 rounded-md border border-gray-200 shadow-sm space-y-4">
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div>
@@ -803,13 +940,12 @@ const HRDashboard: React.FC<HRDashboardProps> = ({ view = 'dashboard' }) => {
                         </div>
                     </div>
                     <div className="pt-4 flex justify-end">
-                        <button onClick={() => setShowReportResults(true)} className="px-6 py-2 bg-indigo-600 text-white font-medium rounded-sm hover:bg-indigo-700 flex items-center">
+                        <button onClick={() => setShowReportResults(true)} className="px-6 py-2 bg-indigo-600 text-white font-medium rounded-sm hover:bg-indigo-700 flex items-center shadow-sm">
                             <FileBarChart size={18} className="mr-2"/> Generate Report
                         </button>
                     </div>
                 </div>
 
-                {/* Report Results */}
                 {showReportResults && (
                     <div className="space-y-6 animate-fade-in">
                         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -832,7 +968,6 @@ const HRDashboard: React.FC<HRDashboardProps> = ({ view = 'dashboard' }) => {
                         </div>
 
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                            {/* Daily Trend */}
                             <div className="bg-white p-6 rounded-md border border-gray-200 shadow-sm">
                                 <h4 className="font-semibold text-gray-700 mb-6">Daily Attendance Trends</h4>
                                 <div className="h-64">
@@ -855,7 +990,6 @@ const HRDashboard: React.FC<HRDashboardProps> = ({ view = 'dashboard' }) => {
                                 </div>
                             </div>
 
-                            {/* Department Breakdown */}
                             <div className="bg-white p-6 rounded-md border border-gray-200 shadow-sm">
                                 <h4 className="font-semibold text-gray-700 mb-6">Department Attendance %</h4>
                                 <div className="h-64">
@@ -870,22 +1004,6 @@ const HRDashboard: React.FC<HRDashboardProps> = ({ view = 'dashboard' }) => {
                                 </div>
                             </div>
                         </div>
-
-                        {/* Late Trend */}
-                        <div className="bg-white p-6 rounded-md border border-gray-200 shadow-sm">
-                            <h4 className="font-semibold text-gray-700 mb-6">Late Arrivals Trend (This Week)</h4>
-                            <div className="h-48">
-                                <ResponsiveContainer width="100%" height="100%">
-                                    <LineChart data={LATE_DATA}>
-                                        <CartesianGrid vertical={false} strokeDasharray="3 3"/>
-                                        <XAxis dataKey="day" axisLine={false} tickLine={false}/>
-                                        <YAxis axisLine={false} tickLine={false}/>
-                                        <Tooltip/>
-                                        <Line type="monotone" dataKey="count" stroke="#f59e0b" strokeWidth={3} dot={{r: 4}}/>
-                                    </LineChart>
-                                </ResponsiveContainer>
-                            </div>
-                        </div>
                     </div>
                 )}
             </div>
@@ -894,17 +1012,14 @@ const HRDashboard: React.FC<HRDashboardProps> = ({ view = 'dashboard' }) => {
 
     const renderAdminManagement = () => (
         <div className="bg-white rounded-md shadow-sm border border-gray-200 flex flex-col h-full overflow-hidden">
-             {/* Header */}
              <div className="p-6 border-b border-gray-200">
                 <h3 className="font-bold text-xl text-gray-900 flex items-center">
                     <Settings className="mr-2 text-indigo-600" /> Admin Management
                 </h3>
-                <p className="text-sm text-gray-500 mt-1">Configure system settings, approvals, and user access.</p>
+                <p className="text-sm text-gray-500 mt-1">Configure system settings, privileged approvals, and user access.</p>
              </div>
              
-             {/* Main Content Split */}
             <div className="flex flex-1 h-full bg-gray-50 overflow-hidden">
-                {/* Sidebar for Admin Section */}
                 <div className="w-64 border-r border-gray-200 bg-white p-4 flex-shrink-0">
                      <div className="space-y-1">
                         <button onClick={() => setAdminSubTab('shifts')} className={`w-full flex items-center px-3 py-2 text-sm font-medium rounded-sm transition-colors ${adminSubTab === 'shifts' ? 'bg-indigo-50 text-indigo-700' : 'text-gray-600 hover:bg-gray-50'}`}>
@@ -925,7 +1040,6 @@ const HRDashboard: React.FC<HRDashboardProps> = ({ view = 'dashboard' }) => {
                      </div>
                 </div>
                 
-                {/* Content Area */}
                 <div className="flex-1 overflow-y-auto">
                      {adminSubTab === 'shifts' && (
                          <div className="p-6">
@@ -937,7 +1051,10 @@ const HRDashboard: React.FC<HRDashboardProps> = ({ view = 'dashboard' }) => {
                      )}
                      {adminSubTab === 'requests' && (
                          <div className="p-6">
-                             <h3 className="font-bold text-gray-800 mb-4">Global Requests</h3>
+                             <h3 className="font-bold text-gray-800 mb-4">Global Requests & Finalization</h3>
+                             <p className="text-sm text-gray-500 mb-4 bg-blue-50 p-3 rounded border border-blue-100 flex items-center">
+                                 <ShieldAlert size={16} className="mr-2 text-blue-600" /> HR Privileges: Finalize Shift Change requests approved by managers here.
+                             </p>
                              {renderGlobalRequests()}
                          </div>
                      )}
@@ -957,7 +1074,6 @@ const HRDashboard: React.FC<HRDashboardProps> = ({ view = 'dashboard' }) => {
     const renderDirectory = () => {
         return (
             <div className="bg-white rounded-md shadow-sm border border-gray-200 flex flex-col h-full overflow-hidden">
-                 {/* Main Header */}
                  <div className="p-6 border-b border-gray-200">
                     <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6">
                         <div>
@@ -974,7 +1090,7 @@ const HRDashboard: React.FC<HRDashboardProps> = ({ view = 'dashboard' }) => {
                                     placeholder="Search employees..." 
                                     value={searchTerm}
                                     onChange={(e) => setSearchTerm(e.target.value)}
-                                    className="pl-9 pr-4 py-2 border border-gray-300 rounded-sm text-sm focus:ring-indigo-500 focus:border-indigo-500"
+                                    className="pl-9 pr-4 py-2 border border-gray-300 rounded-sm text-sm focus:ring-indigo-500 focus:border-indigo-500 shadow-sm"
                                 />
                             </div>
                             {(directoryTab === 'attendance' || directoryTab === 'logs') && (
@@ -991,7 +1107,6 @@ const HRDashboard: React.FC<HRDashboardProps> = ({ view = 'dashboard' }) => {
                         </div>
                     </div>
 
-                    {/* Tabs Navigation */}
                     <div className="flex space-x-6 border-b border-gray-100 overflow-x-auto">
                         {[
                             { id: 'attendance', label: 'Attendance Overview', icon: <CheckCircle size={16}/> },
@@ -1013,7 +1128,6 @@ const HRDashboard: React.FC<HRDashboardProps> = ({ view = 'dashboard' }) => {
                     </div>
                  </div>
                  
-                 {/* Content Area */}
                  <div className="flex-1 overflow-y-auto bg-gray-50">
                     {directoryTab === 'attendance' && <div className="p-6">{renderAttendanceOverview()}</div>}
                     {directoryTab === 'logs' && <div className="p-6">{renderAttendanceLogs()}</div>}
@@ -1024,7 +1138,6 @@ const HRDashboard: React.FC<HRDashboardProps> = ({ view = 'dashboard' }) => {
     
     const renderCompliance = () => (
         <div className="space-y-6">
-            {/* Header */}
             <div className="flex justify-between items-center bg-white p-6 rounded-md shadow-sm border border-gray-200">
                 <div>
                     <h2 className="text-xl font-bold text-gray-900 flex items-center">
@@ -1043,7 +1156,6 @@ const HRDashboard: React.FC<HRDashboardProps> = ({ view = 'dashboard' }) => {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                {/* Audit Log Table */}
                 <div className="lg:col-span-3 bg-white rounded-md shadow-sm border border-gray-200 overflow-hidden">
                     <div className="p-4 border-b border-gray-100 font-semibold text-gray-700 flex justify-between items-center">
                         <span>System Audit Trail</span>
@@ -1076,22 +1188,6 @@ const HRDashboard: React.FC<HRDashboardProps> = ({ view = 'dashboard' }) => {
                             </tbody>
                         </table>
                     </div>
-                </div>
-            </div>
-            
-            {/* Compliance Info Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="bg-blue-50 border border-blue-100 p-6 rounded-md">
-                    <h4 className="font-bold text-blue-900 mb-2">Data Retention Policy</h4>
-                    <p className="text-sm text-blue-700">Historical attendance data is automatically retained for <span className="font-bold">3 years</span> to comply with labor regulations. Archived data is available via export.</p>
-                </div>
-                <div className="bg-green-50 border border-green-100 p-6 rounded-md">
-                    <h4 className="font-bold text-green-900 mb-2">Automated Reporting</h4>
-                    <p className="text-sm text-green-700">Monthly compliance reports are scheduled to be sent to <b>management@quadra.com</b> on the 1st of every month.</p>
-                </div>
-                <div className="bg-orange-50 border border-orange-100 p-6 rounded-md">
-                    <h4 className="font-bold text-orange-900 mb-2">Geo-Fencing Strictness</h4>
-                    <p className="text-sm text-orange-700">Currently set to <span className="font-bold">Strict (50m)</span>. Exceptions require manual approval. 12 exceptions flagged this month.</p>
                 </div>
             </div>
         </div>
@@ -1136,14 +1232,12 @@ const HRDashboard: React.FC<HRDashboardProps> = ({ view = 'dashboard' }) => {
 
     const renderDashboard = () => (
         <div className="space-y-6">
-             {/* HR Banner */}
             <div className="bg-indigo-50 border border-indigo-100 rounded-md p-6">
                 <h2 className="text-indigo-900 font-bold text-lg">
                     HR Admin Dashboard: <span className="font-normal text-indigo-700">Organization-wide attendance & analytics.</span>
                 </h2>
             </div>
 
-             {/* Stats Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div className="bg-white p-6 rounded-md shadow-sm border border-gray-200">
                      <p className="text-sm font-medium text-gray-500">Total Employees</p>
@@ -1175,7 +1269,6 @@ const HRDashboard: React.FC<HRDashboardProps> = ({ view = 'dashboard' }) => {
                     {renderApprovals()}
                 </div>
                 <div className="space-y-6">
-                     {/* Preview of Directory in Dashboard, linking to full view */}
                     <div className="bg-white rounded-md shadow-sm border border-gray-200 p-6">
                         <div className="flex justify-between items-center mb-4">
                             <h3 className="font-semibold text-gray-800">Quick Directory</h3>
@@ -1195,83 +1288,20 @@ const HRDashboard: React.FC<HRDashboardProps> = ({ view = 'dashboard' }) => {
                             ))}
                         </ul>
                     </div>
-                    {/* Notifications Section */}
                     {renderNotifications()}
                 </div>
             </div>
-
-            {/* Personal Attendance & Quick Actions (At Bottom) */}
-             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {/* Clock & Check-In */}
-                <div className="bg-white p-8 rounded-md shadow-sm border border-gray-200 text-center relative overflow-hidden">
-                    <div className="h-1 bg-[#6264A7] absolute top-0 left-0 w-full"></div>
-                    <h2 className="text-4xl font-light text-gray-800 mb-1">{format(currentTime, 'hh:mm a')}</h2>
-                    <p className="text-gray-500 mb-8">{format(currentTime, 'EEEE, MMMM d, yyyy')}</p>
-                    
-                    {isCheckedIn ? (
-                        <div className="max-w-xs mx-auto">
-                            <div className="flex items-center justify-center text-green-600 mb-4 bg-green-50 py-2 rounded">
-                                <CheckCircle size={18} className="mr-2"/> Checked In at {format(new Date(myActiveRecord!.checkInTime!), 'hh:mm a')}
-                            </div>
-                            <button onClick={initiateCheckOut} className="w-full py-2 bg-[#C4314B] hover:bg-[#a3263d] text-white font-semibold rounded shadow-sm">
-                                Check Out
-                            </button>
-                        </div>
-                    ) : (
-                        <div className="max-w-xs mx-auto">
-                            <p className="text-sm text-gray-500 mb-4">You are not checked in yet.</p>
-                            <button onClick={initiateCheckIn} className="w-full py-2 bg-[#6264A7] hover:bg-[#525491] text-white font-semibold rounded shadow-sm">
-                                Check In
-                            </button>
-                        </div>
-                    )}
-                </div>
-
-                {/* Quick Actions */}
-                <div className="bg-white p-6 rounded-md shadow-sm border border-gray-200 flex flex-col justify-between">
-                    <div>
-                        <h3 className="font-semibold text-gray-800 mb-4">Quick Actions</h3>
-                        <div className="space-y-3">
-                            <button onClick={() => handlePersonalRequest(RequestType.LEAVE)} className="w-full flex items-center justify-between p-3 border border-gray-200 rounded hover:bg-gray-50 group transition-colors">
-                                <span className="text-sm font-medium text-gray-700 group-hover:text-[#6264A7]">Request Leave</span>
-                                <ChevronRightIcon size={16} className="text-gray-400 group-hover:text-[#6264A7]"/>
-                            </button>
-                            <button onClick={() => handlePersonalRequest(RequestType.PERMISSION)} className="w-full flex items-center justify-between p-3 border border-gray-200 rounded hover:bg-gray-50 group transition-colors">
-                                <span className="text-sm font-medium text-gray-700 group-hover:text-[#6264A7]">Request Permission</span>
-                                <ChevronRightIcon size={16} className="text-gray-400 group-hover:text-[#6264A7]"/>
-                            </button>
-                            <button onClick={() => handlePersonalRequest(RequestType.REGULARIZATION)} className="w-full flex items-center justify-between p-3 border border-gray-200 rounded hover:bg-gray-50 group transition-colors">
-                                <span className="text-sm font-medium text-gray-700 group-hover:text-[#6264A7]">Regularize Attendance</span>
-                                <ChevronRightIcon size={16} className="text-gray-400 group-hover:text-[#6264A7]"/>
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                {/* Personal Leave Balance */}
-                <div className="bg-white p-6 rounded-md shadow-sm border border-gray-200 flex flex-col justify-center">
-                    <h3 className="font-semibold text-gray-800 mb-4">My Leave Balance</h3>
-                    <div className="flex justify-between text-center">
-                        <div><div className="text-2xl font-bold text-[#6264A7]">{currentUser.leaveBalance.casual}</div><div className="text-xs text-gray-500 uppercase mt-1">Casual</div></div>
-                        <div><div className="text-2xl font-bold text-[#6264A7]">{currentUser.leaveBalance.sick}</div><div className="text-xs text-gray-500 uppercase mt-1">Sick</div></div>
-                        <div><div className="text-2xl font-bold text-[#6264A7]">{currentUser.leaveBalance.earned}</div><div className="text-xs text-gray-500 uppercase mt-1">Earned</div></div>
-                    </div>
-                </div>
-             </div>
         </div>
     );
 
-    // --- Personal Modal Render (Check-In / Request) ---
     const renderPersonalModal = () => {
         if (!showLeaveModal && !showCheckInModal) return null;
-        
         const isCheckIn = showCheckInModal;
         const title = isCheckIn ? "Check In" : "New Request";
 
         return (
             <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-[1px]">
                 <div className="bg-white w-full max-w-2xl shadow-2xl rounded-sm overflow-hidden flex flex-col max-h-[90vh]">
-                    {/* Header */}
                     <div className="flex justify-between items-center p-5 border-b border-gray-200">
                         <div className="flex items-center space-x-3">
                              <div className="bg-[#6264A7] p-1.5 rounded-sm">
@@ -1279,12 +1309,8 @@ const HRDashboard: React.FC<HRDashboardProps> = ({ view = 'dashboard' }) => {
                              </div>
                              <h3 className="text-xl font-bold text-gray-800">{title}</h3>
                         </div>
-                        <button onClick={closePersonalModal} className="text-gray-400 hover:text-gray-600">
-                            <X size={24} />
-                        </button>
+                        <button onClick={closePersonalModal} className="text-gray-400 hover:text-gray-600"><X size={24} /></button>
                     </div>
-
-                    {/* Content */}
                     <div className="p-6 overflow-y-auto space-y-6">
                         {isCheckIn ? (
                             <div className="grid grid-cols-2 gap-x-8 gap-y-5">
@@ -1294,11 +1320,7 @@ const HRDashboard: React.FC<HRDashboardProps> = ({ view = 'dashboard' }) => {
                                 </div>
                                 <div className="col-span-2">
                                     <label className="block text-xs font-semibold text-gray-500 mb-1">Work Location</label>
-                                    <select 
-                                        value={locationType} 
-                                        onChange={(e) => setLocationType(e.target.value as LocationType)} 
-                                        className="w-full bg-gray-50 border border-gray-200 rounded-[3px] px-3 py-2 text-sm focus:ring-1 focus:ring-[#6264A7] focus:border-[#6264A7] outline-none"
-                                    >
+                                    <select value={locationType} onChange={(e) => setLocationType(e.target.value as LocationType)} className="w-full bg-gray-50 border border-gray-200 rounded-[3px] px-3 py-2 text-sm focus:ring-1 focus:ring-[#6264A7] outline-none">
                                         <option value={LocationType.OFFICE}>Office</option>
                                         <option value={LocationType.HOME}>Home</option>
                                         <option value={LocationType.CUSTOMER_SITE}>Customer Site</option>
@@ -1307,64 +1329,15 @@ const HRDashboard: React.FC<HRDashboardProps> = ({ view = 'dashboard' }) => {
                             </div>
                         ) : (
                             <div className="grid grid-cols-2 gap-x-8 gap-y-5">
-                                <div className="col-span-2">
-                                    <label className="block text-xs font-semibold text-gray-500 mb-1">Request Type</label>
-                                    <select
-                                        value={requestType}
-                                        onChange={(e) => setRequestType(e.target.value as RequestType)}
-                                        className="w-full bg-gray-50 border border-gray-200 rounded-[3px] px-3 py-2 text-sm focus:ring-1 focus:ring-[#6264A7] focus:border-[#6264A7] outline-none"
-                                    >
-                                        <option value={RequestType.PERMISSION}>{RequestType.PERMISSION}</option>
-                                        <option value={RequestType.LEAVE}>{RequestType.LEAVE}</option>
-                                        <option value={RequestType.REGULARIZATION}>{RequestType.REGULARIZATION}</option>
-                                        <option value={RequestType.LOCATION_EXCEPTION}>{RequestType.LOCATION_EXCEPTION}</option>
-                                    </select>
-                                </div>
-                                
-                                <div>
-                                    <label className="block text-xs font-semibold text-gray-500 mb-1">Start Date</label>
-                                    <div className="relative">
-                                        <input 
-                                            type="date" 
-                                            value={leaveStartDate} 
-                                            onChange={(e) => setLeaveStartDate(e.target.value)}
-                                            className="w-full bg-gray-50 border border-gray-200 rounded-[3px] px-3 py-2 text-sm focus:ring-1 focus:ring-[#6264A7] outline-none"
-                                        />
-                                    </div>
-                                </div>
-                                
-                                <div>
-                                    <label className="block text-xs font-semibold text-gray-500 mb-1">Duration</label>
-                                    <select 
-                                        value={duration} 
-                                        onChange={(e) => setDuration(e.target.value)} 
-                                        className="w-full bg-gray-50 border border-gray-200 rounded-[3px] px-3 py-2 text-sm focus:ring-1 focus:ring-[#6264A7] focus:border-[#6264A7] outline-none"
-                                    >
-                                        {DURATION_OPTIONS.map(opt => (
-                                            <option key={opt} value={opt}>{opt}</option>
-                                        ))}
-                                    </select>
-                                </div>
-
-                                <div className="col-span-2">
-                                    <label className="block text-xs font-semibold text-gray-500 mb-1">Reason / Remarks</label>
-                                    <textarea 
-                                        value={leaveReason} 
-                                        onChange={(e) => setLeaveReason(e.target.value)}
-                                        placeholder="Enter reason..." 
-                                        className="w-full bg-gray-50 border border-gray-200 rounded-[3px] px-3 py-2 text-sm h-24 resize-none focus:ring-1 focus:ring-[#6264A7] outline-none"
-                                    ></textarea>
-                                </div>
+                                <div className="col-span-2"><label className="block text-xs font-semibold text-gray-500 mb-1">Request Type</label><select value={requestType} onChange={(e) => setRequestType(e.target.value as RequestType)} className="w-full bg-gray-50 border border-gray-200 rounded-[3px] px-3 py-2 text-sm focus:ring-1 focus:ring-[#6264A7] outline-none"><option value={RequestType.PERMISSION}>{RequestType.PERMISSION}</option><option value={RequestType.LEAVE}>{RequestType.LEAVE}</option><option value={RequestType.REGULARIZATION}>{RequestType.REGULARIZATION}</option><option value={RequestType.LOCATION_EXCEPTION}>{RequestType.LOCATION_EXCEPTION}</option></select></div>
+                                <div><label className="block text-xs font-semibold text-gray-500 mb-1">Start Date</label><input type="date" value={leaveStartDate} onChange={(e) => setLeaveStartDate(e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-[3px] px-3 py-2 text-sm focus:ring-1 focus:ring-[#6264A7] outline-none"/></div>
+                                <div><label className="block text-xs font-semibold text-gray-500 mb-1">Duration</label><select value={duration} onChange={(e) => setDuration(e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-[3px] px-3 py-2 text-sm focus:ring-1 focus:ring-[#6264A7] outline-none">{DURATION_OPTIONS.map(opt => (<option key={opt} value={opt}>{opt}</option>))}</select></div>
+                                <div className="col-span-2"><label className="block text-xs font-semibold text-gray-500 mb-1">Reason / Remarks</label><textarea value={leaveReason} onChange={(e) => setLeaveReason(e.target.value)} placeholder="Enter reason..." className="w-full bg-gray-50 border border-gray-300 rounded-[3px] px-3 py-2 text-sm h-24 resize-none focus:ring-1 focus:ring-[#6264A7] outline-none"></textarea></div>
                             </div>
                         )}
                     </div>
-
-                    {/* Footer */}
                     <div className="p-5 border-t border-gray-200 flex justify-end bg-white">
-                        <button 
-                            onClick={isCheckIn ? confirmCheckIn : submitPersonalRequest}
-                            className="bg-[#6264A7] hover:bg-[#51538f] text-white font-semibold py-2 px-8 rounded-[3px] text-sm transition-colors shadow-sm"
-                        >
+                        <button onClick={isCheckIn ? confirmCheckIn : submitPersonalRequest} className="bg-[#6264A7] hover:bg-[#51538f] text-white font-semibold py-2 px-8 rounded-[3px] text-sm transition-colors shadow-sm">
                             {isCheckIn ? "Check In" : "Submit"}
                         </button>
                     </div>
@@ -1383,66 +1356,105 @@ const HRDashboard: React.FC<HRDashboardProps> = ({ view = 'dashboard' }) => {
             {localView === 'compliance' && renderCompliance()}
             {(localView as any) === 'member_detail' && renderMemberDetail()}
             
-            {/* Personal Modal */}
             {renderPersonalModal()}
 
-            {/* Edit Shift Modal */}
             {showShiftModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-fade-in">
-                    <div className="bg-white rounded-lg shadow-xl w-full max-w-sm p-6">
-                        <div className="flex justify-between items-center mb-4">
-                            <h3 className="text-lg font-bold text-gray-800">Edit Shift Details</h3>
-                            <button onClick={() => setShowShiftModal(false)}><X size={20} className="text-gray-400"/></button>
-                        </div>
-                        <div className="space-y-4">
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Shift Name</label>
-                                <input type="text" value={shiftName} onChange={(e) => setShiftName(e.target.value)} className="w-full border-gray-300 rounded-sm p-2" placeholder="e.g. General Shift A" />
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Start Time</label>
-                                    <input type="time" value={shiftStart} onChange={(e) => setShiftStart(e.target.value)} className="w-full border-gray-300 rounded-sm p-2" />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">End Time</label>
-                                    <input type="time" value={shiftEnd} onChange={(e) => setShiftEnd(e.target.value)} className="w-full border-gray-300 rounded-sm p-2" />
-                                </div>
-                            </div>
-                            <button onClick={saveShift} className="w-full py-2 bg-indigo-600 text-white font-bold rounded-sm hover:bg-indigo-700">Save Shift</button>
-                        </div>
-                    </div>
-                </div>
-            )}
+  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+    <div className="bg-white rounded-md shadow-2xl w-full max-w-4xl flex flex-col max-h-[95vh]">
 
-            {/* Create New Shift Modal */}
-            {showCreateShiftModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-fade-in">
-                    <div className="bg-white rounded-lg shadow-xl w-full max-w-sm p-6">
-                        <div className="flex justify-between items-center mb-4">
-                            <h3 className="text-lg font-bold text-gray-800">Create New Shift Pattern</h3>
-                            <button onClick={() => setShowCreateShiftModal(false)}><X size={20} className="text-gray-400"/></button>
-                        </div>
-                        <div className="space-y-4">
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Shift Name</label>
-                                <input type="text" value={newShiftName} onChange={(e) => setNewShiftName(e.target.value)} className="w-full border-gray-300 rounded-sm p-2" placeholder="e.g. Flexible Shift B" />
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Start Time</label>
-                                    <input type="time" value={newShiftStart} onChange={(e) => setNewShiftStart(e.target.value)} className="w-full border-gray-300 rounded-sm p-2" />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">End Time</label>
-                                    <input type="time" value={newShiftEnd} onChange={(e) => setNewShiftEnd(e.target.value)} className="w-full border-gray-300 rounded-sm p-2" />
-                                </div>
-                            </div>
-                            <button onClick={handleCreateShift} disabled={!newShiftName} className="w-full py-2 bg-indigo-600 text-white font-bold rounded-sm hover:bg-indigo-700 disabled:opacity-50">Create Shift Pattern</button>
-                        </div>
-                    </div>
-                </div>
-            )}
+      <div className="flex justify-between items-center p-6 border-b">
+        <div>
+          <h3 className="text-xl font-black uppercase">Edit Multi-Shift Schedule</h3>
+          <p className="text-sm text-indigo-600 font-semibold">
+            {users.find(u => u.id === shiftEditUserId)?.name}
+          </p>
+        </div>
+        <button onClick={() => setShowShiftModal(false)}>
+          <X size={26} />
+        </button>
+      </div>
+
+      <div className="p-6 space-y-6 overflow-y-auto">
+
+        {requests.some(
+          r =>
+            r.userId === shiftEditUserId &&
+            r.type === RequestType.SHIFT_CHANGE &&
+            r.status === RequestStatus.MANAGER_APPROVED
+        ) && (
+          <div className="bg-green-50 border border-green-200 rounded p-4 flex justify-between items-center">
+            <span className="text-green-700 font-bold text-sm">
+              Manager-approved shift recommendation found
+            </span>
+             <button
+                onClick={applyManagerRecommendation}
+                className="bg-green-600 text-white px-4 py-2 text-sm font-bold rounded hover:bg-green-700"
+            >
+            Apply Recommendation
+            </button>
+          </div>
+        )}
+
+        <div className="bg-indigo-50 border p-4 rounded">
+          <div className="grid grid-cols-4 gap-4 items-end">
+            <input type="date" value={tempDate} onChange={e => setTempDate(e.target.value)} />
+            <select value={tempShiftName} onChange={e => handleTempShiftSelect(e.target.value)}>
+              {shiftTemplates.map(s => (
+                <option key={s.name} value={s.name}>{s.name}</option>
+              ))}
+            </select>
+            <input type="time" value={tempStart} onChange={e => setTempStart(e.target.value)} />
+            <input type="time" value={tempEnd} onChange={e => setTempEnd(e.target.value)} />
+
+            <button
+              onClick={addAssignmentToModal}
+              className="col-span-4 bg-indigo-600 text-white py-2 font-bold rounded"
+            >
+              Add To List
+            </button>
+          </div>
+        </div>
+
+        <table className="w-full border text-sm">
+          <thead className="bg-gray-100">
+            <tr>
+              <th>Date</th>
+              <th>Shift</th>
+              <th>Timing</th>
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            {modalAssignments.map(a => (
+              <tr key={a.date}>
+                <td>{a.date}</td>
+                <td>{a.shift.name}</td>
+                <td>{a.shift.startTime} – {a.shift.endTime}</td>
+                <td>
+                  <button onClick={() =>
+                    setModalAssignments(modalAssignments.filter(x => x.date !== a.date))
+                  }>
+                    <Trash2 size={16} />
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="p-6 border-t flex justify-end gap-6">
+        <button onClick={() => setShowShiftModal(false)}>Cancel</button>
+        <button
+          onClick={saveBulkShifts}
+          className="bg-indigo-600 text-white px-8 py-2 font-black rounded"
+        >
+          Commit All Changes
+        </button>
+      </div>
+    </div>
+  </div>
+)}
         </div>
     );
 };

@@ -437,7 +437,24 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ view = 'dashboard' 
                                             </div>
                                             <p className="text-sm text-gray-500 mt-1">{req.startDate}</p>
                                             
-                                            {/* Feature 3: Enhanced Violation Details */}
+                                            {/* Date-Specific Shift Breakdown */}
+                                            {req.type === RequestType.SHIFT_CHANGE && req.shiftChangeDetails?.assignments && (
+                                                <div className="mt-3 bg-indigo-50/50 border border-indigo-100 rounded overflow-hidden">
+                                                    <div className="px-3 py-1.5 bg-indigo-100/50 text-[10px] font-bold text-indigo-700 uppercase tracking-widest">Requested Schedule</div>
+                                                    <div className="divide-y divide-indigo-50">
+                                                        {req.shiftChangeDetails.assignments.map(item => (
+                                                            <div key={item.date} className="px-3 py-2 flex items-center justify-between text-xs">
+                                                                <span className="text-gray-600 font-medium">{format(new Date(item.date), 'EEE, MMM d, yyyy')}</span>
+                                                                <div className="text-right">
+                                                                    <span className="font-bold text-indigo-900">{item.shift.name}</span>
+                                                                    <span className="text-gray-400 ml-2">({item.shift.startTime}-{item.shift.endTime})</span>
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+
                                             {req.violationDetails && (
                                                 <div className="mt-3 grid grid-cols-2 gap-4 bg-gray-50 p-3 rounded border border-gray-200">
                                                     <div>
@@ -700,9 +717,9 @@ const ManagerDashboard: React.FC<ManagerDashboardProps> = ({ view = 'dashboard' 
                         ) : (
                             <div className="grid grid-cols-2 gap-x-8 gap-y-5">
                                 <div className="col-span-2"><label className="block text-xs font-semibold text-gray-500 mb-1">Request Type</label><select value={requestType} onChange={(e) => setRequestType(e.target.value as RequestType)} className="w-full bg-gray-50 border border-gray-200 rounded-[3px] px-3 py-2 text-sm focus:ring-1 focus:ring-[#6264A7] outline-none"><option value={RequestType.PERMISSION}>{RequestType.PERMISSION}</option><option value={RequestType.LEAVE}>{RequestType.LEAVE}</option><option value={RequestType.REGULARIZATION}>{RequestType.REGULARIZATION}</option><option value={RequestType.LOCATION_EXCEPTION}>{RequestType.LOCATION_EXCEPTION}</option></select></div>
-                                <div><label className="block text-xs font-semibold text-gray-500 mb-1">Start Date</label><div className="relative"><input type="date" value={leaveStartDate} onChange={(e) => setLeaveStartDate(e.target.value)} className="w-full bg-gray-50 border border-gray-200 rounded-[3px] px-3 py-2 text-sm focus:ring-1 focus:ring-[#6264A7] outline-none"/></div></div>
-                                <div><label className="block text-xs font-semibold text-gray-500 mb-1">Duration</label><select value={duration} onChange={(e) => setDuration(e.target.value)} className="w-full bg-gray-50 border border-gray-200 rounded-[3px] px-3 py-2 text-sm focus:ring-1 focus:ring-[#6264A7] outline-none">{DURATION_OPTIONS.map(opt => (<option key={opt} value={opt}>{opt}</option>))}</select></div>
-                                <div className="col-span-2"><label className="block text-xs font-semibold text-gray-500 mb-1">Reason / Remarks</label><textarea value={leaveReason} onChange={(e) => setLeaveReason(e.target.value)} placeholder="Enter reason..." className="w-full bg-gray-50 border border-gray-200 rounded-[3px] px-3 py-2 text-sm h-24 resize-none focus:ring-1 focus:ring-[#6264A7] outline-none"></textarea></div>
+                                <div><label className="block text-xs font-semibold text-gray-500 mb-1">Start Date</label><div className="relative"><input type="date" value={leaveStartDate} onChange={(e) => setLeaveStartDate(e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-[3px] px-3 py-2 text-sm focus:ring-1 focus:ring-[#6264A7] outline-none"/></div></div>
+                                <div><label className="block text-xs font-semibold text-gray-500 mb-1">Duration</label><select value={duration} onChange={(e) => setDuration(e.target.value)} className="w-full bg-gray-50 border border-gray-300 rounded-[3px] px-3 py-2 text-sm focus:ring-1 focus:ring-[#6264A7] outline-none">{DURATION_OPTIONS.map(opt => (<option key={opt} value={opt}>{opt}</option>))}</select></div>
+                                <div className="col-span-2"><label className="block text-xs font-semibold text-gray-500 mb-1">Reason / Remarks</label><textarea value={leaveReason} onChange={(e) => setLeaveReason(e.target.value)} placeholder="Enter reason..." className="w-full bg-gray-50 border border-gray-300 rounded-[3px] px-3 py-2 text-sm h-24 resize-none focus:ring-1 focus:ring-[#6264A7] outline-none"></textarea></div>
                             </div>
                         )}
                     </div>

@@ -7,7 +7,7 @@ import {
     AlertTriangle, X, Download, Plus, Trash2, Building2, Globe, MessageCircle, ChevronLeft, Filter, Search, Edit, Bell, Calendar as CalendarIcon, MapPinned, AlertCircle, Map as MapIcon, Navigation, Info
 } from 'lucide-react';
 import { format, differenceInMinutes, addMonths, isSameMonth, parse } from 'date-fns';
-import { LocationType, RequestType, RequestStatus, AttendanceSegment, UserRole, RequestItem, ShiftConfig } from '../types';
+import { LocationType, RequestType, RequestStatus, AttendanceSegment, UserRole, RequestItem, ShiftConfig, ShiftAssignment } from '../types';
 import ManagerDashboard from './ManagerDashboard';
 import HRDashboard from './HRDashboard';
 import { VisualTimeline, AttendanceCalendar, formatDuration } from './SharedComponents';
@@ -64,10 +64,12 @@ const EmployeeDashboard: React.FC<{ defaultTab?: 'overview' | 'calendar' | 'requ
     const [requestType, setRequestType] = useState(RequestType.LEAVE); 
     const [duration, setDuration] = useState("Full Day");
 
-    const [selectedShift, setSelectedShift] = useState<string>("General Shift A");
-    const [exceptionLocation, setExceptionLocation] = useState<LocationType>(LocationType.HOME);
+    // Multiple Date-Specific Shift Selection
+    const [shiftAssignments, setShiftAssignments] = useState<ShiftAssignment[]>([]);
+    const [tempShiftDate, setTempShiftDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+    const [selectedShiftName, setSelectedShiftName] = useState<string>("General Shift A");
 
-    // Specific violation reason state
+    const [exceptionLocation, setExceptionLocation] = useState<LocationType>(LocationType.HOME);
     const [violationReason, setViolationReason] = useState("");
 
     const SHIFT_TEMPLATES: ShiftConfig[] = [
@@ -140,7 +142,6 @@ const EmployeeDashboard: React.FC<{ defaultTab?: 'overview' | 'calendar' | 'requ
         const shiftTime = parse(timeStr, 'HH:mm', now);
         
         if (type === 'in') {
-            // 15 min grace period mock
             const isLate = now.getTime() > shiftTime.getTime() + (15 * 60 * 1000);
             return isLate 
                 ? { label: 'Late Check-In', color: 'text-red-600', isAlert: true } 
@@ -177,8 +178,6 @@ const EmployeeDashboard: React.FC<{ defaultTab?: 'overview' | 'calendar' | 'requ
             setShowGeoAlert(true);
             return;
         }
-        
-        // After geo-validation, move to second-level shift confirmation
         setShowGeoAlert(false);
         setModalStage('shift_confirm');
     };
@@ -186,8 +185,6 @@ const EmployeeDashboard: React.FC<{ defaultTab?: 'overview' | 'calendar' | 'requ
     const finalizeCheckIn = () => {
         if (!gpsData) return;
         checkIn(locationType, gpsData.lat, gpsData.lng);
-        
-        // Log geo exception if relevant
         if (currentDistanceToSelected && currentDistanceToSelected > 100) {
             createRequest(
                 RequestType.LOCATION_EXCEPTION, 
@@ -196,8 +193,6 @@ const EmployeeDashboard: React.FC<{ defaultTab?: 'overview' | 'calendar' | 'requ
                 { locationType, duration: 'Immediate Check-in Override' }
             );
         }
-
-        // Feature 3: Automated Late Check-In Request
         const status = getShiftStatus('in');
         if (status.isAlert) {
             createRequest(
@@ -218,8 +213,6 @@ const EmployeeDashboard: React.FC<{ defaultTab?: 'overview' | 'calendar' | 'requ
 
     const finalizeCheckOut = () => {
          checkOut([{ id: '1', locationType: LocationType.OFFICE, durationMinutes: 480, notes: 'Self Checkout' }]);
-         
-         // Feature 3: Early Check-Out Request
          const status = getShiftStatus('out');
          if (status.isAlert) {
             createRequest(
@@ -238,17 +231,39 @@ const EmployeeDashboard: React.FC<{ defaultTab?: 'overview' | 'calendar' | 'requ
          closeModal();
     };
 
+    const addShiftAssignment = () => {
+        const selectedShift = SHIFT_TEMPLATES.find(s => s.name === selectedShiftName);
+        if (selectedShift && !shiftAssignments.find(a => a.date === tempShiftDate)) {
+            setShiftAssignments([...shiftAssignments, { date: tempShiftDate, shift: selectedShift }].sort((a, b) => a.date.localeCompare(b.date)));
+        }
+    };
+
+    const removeShiftAssignment = (date: string) => {
+        setShiftAssignments(shiftAssignments.filter(a => a.date !== date));
+    };
+
     const handleSubmitRequest = () => {
         let details: any = { duration };
+        let submitStartDate = leaveStartDate;
+
         if (requestType === RequestType.SHIFT_CHANGE) {
-            details = { requestedShift: SHIFT_TEMPLATES.find(s => s.name === selectedShift) };
+            if (shiftAssignments.length === 0) {
+                alert("Please add at least one shift assignment.");
+                return;
+            }
+            submitStartDate = shiftAssignments[0].date;
+            details = { 
+                assignments: shiftAssignments,
+                requestedShift: shiftAssignments[0].shift // Fallback/Reference
+            };
         } else if (requestType === RequestType.LOCATION_EXCEPTION) {
             details = { locationType: exceptionLocation, duration };
         }
+
         if (editingRequestId) {
-            updateRequest(editingRequestId, requestType, leaveStartDate, leaveReason, details);
+            updateRequest(editingRequestId, requestType, submitStartDate, leaveReason, details);
         } else {
-            createRequest(requestType, leaveStartDate, leaveReason, details);
+            createRequest(requestType, submitStartDate, leaveReason, details);
         }
         closeModal();
     };
@@ -259,6 +274,9 @@ const EmployeeDashboard: React.FC<{ defaultTab?: 'overview' | 'calendar' | 'requ
         setLeaveStartDate(req.startDate);
         setLeaveEndDate(req.endDate || req.startDate);
         setLeaveReason(req.reason);
+        if (req.shiftChangeDetails?.assignments) {
+            setShiftAssignments(req.shiftChangeDetails.assignments);
+        }
         setShowLeaveModal(true);
     };
 
@@ -271,6 +289,7 @@ const EmployeeDashboard: React.FC<{ defaultTab?: 'overview' | 'calendar' | 'requ
         setEditingRequestId(null);
         setOtherAreaText("");
         setViolationReason("");
+        setShiftAssignments([]);
         setModalStage('selection');
     };
 
@@ -565,21 +584,76 @@ const EmployeeDashboard: React.FC<{ defaultTab?: 'overview' | 'calendar' | 'requ
                             <div className="grid grid-cols-2 gap-x-8 gap-y-5">
                                 <div className="col-span-2">
                                     <label className="block text-xs font-semibold text-gray-500 mb-1">Request Type</label>
-                                    <select value={requestType} onChange={(e) => setRequestType(e.target.value as RequestType)} className="w-full border border-gray-300 rounded px-3 py-2 text-sm bg-white">
-                                        <option value={RequestType.PERMISSION}>{RequestType.PERMISSION}</option>
+                                    <select value={requestType} onChange={(e) => setRequestType(e.target.value as RequestType)} className="w-full border border-gray-300 rounded px-3 py-2 text-sm bg-white focus:ring-[#6264A7] outline-none">
+                                        <option value={RequestType.SHIFT_CHANGE}>{RequestType.SHIFT_CHANGE}</option>
                                         <option value={RequestType.LEAVE}>{RequestType.LEAVE}</option>
+                                        <option value={RequestType.PERMISSION}>{RequestType.PERMISSION}</option>
                                         <option value={RequestType.REGULARIZATION}>{RequestType.REGULARIZATION}</option>
                                         <option value={RequestType.LOCATION_EXCEPTION}>{RequestType.LOCATION_EXCEPTION}</option>
-                                        <option value={RequestType.SHIFT_CHANGE}>{RequestType.SHIFT_CHANGE}</option>
                                     </select>
                                 </div>
+
                                 {requestType === RequestType.SHIFT_CHANGE ? (
                                     <div className="col-span-2 space-y-4">
-                                        <div className="bg-indigo-50 border border-indigo-100 rounded p-3"><p className="text-xs font-semibold text-indigo-700 uppercase mb-1">Current Shift</p><p className="text-sm font-bold text-indigo-900">{currentUser.shift?.name} ({currentUser.shift?.startTime} - {currentUser.shift?.endTime})</p></div>
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <div><label className="block text-xs font-semibold text-gray-500 mb-1">Effective Date</label><input type="date" value={leaveStartDate} onChange={(e) => setLeaveStartDate(e.target.value)} className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-[#6264A7] outline-none"/></div>
-                                            <div><label className="block text-xs font-semibold text-gray-500 mb-1">New Shift</label><select value={selectedShift} onChange={(e) => setSelectedShift(e.target.value)} className="w-full border border-gray-300 rounded px-3 py-2 text-sm bg-white">{SHIFT_TEMPLATES.map(s => (<option key={s.name} value={s.name}>{s.name}</option>))}</select></div>
+                                        <div className="bg-indigo-50 border border-indigo-100 rounded p-4">
+                                            <p className="text-[10px] font-bold text-indigo-700 uppercase mb-1 tracking-widest">Current Shift</p>
+                                            <p className="text-sm font-bold text-indigo-900">{currentUser.shift?.name} ({currentUser.shift?.startTime} - {currentUser.shift?.endTime})</p>
                                         </div>
+                                        <div className="flex items-end space-x-3">
+                                            <div className="flex-1">
+                                                <label className="block text-xs font-semibold text-gray-500 mb-1">New Shift</label>
+                                                <select 
+                                                    value={selectedShiftName} 
+                                                    onChange={(e) => setSelectedShiftName(e.target.value)} 
+                                                    className="w-full border border-gray-300 rounded px-3 py-2 text-sm bg-white focus:ring-[#6264A7] outline-none"
+                                                >
+                                                    {SHIFT_TEMPLATES.map(s => (<option key={s.name} value={s.name}>{s.name}</option>))}
+                                                </select>
+                                            </div>
+                                            <div className="flex-1">
+                                                <label className="block text-xs font-semibold text-gray-500 mb-1">Add Target Dates</label>
+                                                <input 
+                                                    type="date" 
+                                                    value={tempShiftDate} 
+                                                    onChange={(e) => setTempShiftDate(e.target.value)} 
+                                                    className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-[#6264A7] outline-none"
+                                                />
+                                            </div>
+                                            <button 
+                                                onClick={addShiftAssignment}
+                                                className="h-9 w-10 flex items-center justify-center bg-indigo-50 border border-indigo-200 text-[#6264A7] rounded hover:bg-indigo-100 transition-colors shadow-sm"
+                                            >
+                                                <Plus size={20}/>
+                                            </button>
+                                        </div>
+
+                                        {shiftAssignments.length > 0 && (
+                                            <div className="border border-gray-200 rounded-md overflow-hidden bg-white shadow-sm">
+                                                <table className="w-full text-xs text-left">
+                                                    <thead className="bg-gray-50 text-gray-500 uppercase font-bold border-b border-gray-100">
+                                                        <tr>
+                                                            <th className="px-4 py-2.5">Date</th>
+                                                            <th className="px-4 py-2.5">Requested Shift</th>
+                                                            <th className="px-4 py-2.5 text-right">Action</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody className="divide-y divide-gray-50">
+                                                        {shiftAssignments.map(item => (
+                                                            <tr key={item.date} className="hover:bg-indigo-50/20 transition-colors">
+                                                                <td className="px-4 py-2.5 font-semibold text-gray-700">{format(new Date(item.date), 'EEEE, MMM d')}</td>
+                                                                <td className="px-4 py-2.5">
+                                                                    <span className="font-bold text-[#6264A7]">{item.shift.name}</span>
+                                                                    <span className="text-gray-400 ml-2 font-normal">({item.shift.startTime}-{item.shift.endTime})</span>
+                                                                </td>
+                                                                <td className="px-4 py-2.5 text-right">
+                                                                    <button onClick={() => removeShiftAssignment(item.date)} className="text-gray-400 hover:text-red-600 transition-colors"><Trash2 size={14}/></button>
+                                                                </td>
+                                                            </tr>
+                                                        ))}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        )}
                                     </div>
                                 ) : requestType === RequestType.LOCATION_EXCEPTION ? (
                                     <div className="col-span-2 space-y-4">
@@ -596,7 +670,7 @@ const EmployeeDashboard: React.FC<{ defaultTab?: 'overview' | 'calendar' | 'requ
                                     <><div className="col-span-1"><label className="block text-xs font-semibold text-gray-500 mb-1">Start Date</label><input type="date" value={leaveStartDate} onChange={(e) => setLeaveStartDate(e.target.value)} className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-[#6264A7] outline-none"/></div><div className="col-span-1"><label className="block text-xs font-semibold text-gray-500 mb-1">Duration</label><select value={duration} onChange={(e) => setDuration(e.target.value)} className="w-full border border-gray-300 rounded px-3 py-2 text-sm bg-white">{DURATION_OPTIONS.map(opt => (<option key={opt} value={opt}>{opt}</option>))}</select></div></>
                                 )}
                                 <div className="col-span-2">
-                                    <label className="block text-xs font-semibold text-gray-500 mb-1">Reason / Remarks</label>
+                                    <label className="block text-xs font-semibold text-gray-500 mb-1 uppercase tracking-wider">Reason / Remarks</label>
                                     <textarea value={leaveReason} onChange={(e) => setLeaveReason(e.target.value)} placeholder="Provide context for this request..." className="w-full border border-gray-300 rounded px-3 py-2 text-sm h-24 resize-none outline-none focus:ring-[#6264A7] focus:border-[#6264A7]"></textarea>
                                 </div>
                             </div>
@@ -621,7 +695,7 @@ const EmployeeDashboard: React.FC<{ defaultTab?: 'overview' | 'calendar' | 'requ
                                 }
                             }}
                             disabled={(isCheckIn && showGeoAlert) || (isCheckOut && getShiftStatus('out').isAlert && !violationReason.trim())}
-                            className="bg-[#6264A7] hover:bg-[#525491] text-white font-semibold py-2 px-8 rounded-[3px] text-sm transition-colors shadow-sm disabled:opacity-30 disabled:cursor-not-allowed"
+                            className="bg-[#6264A7] hover:bg-[#525491] text-white font-semibold py-2 px-10 rounded-[3px] text-sm transition-colors shadow-sm disabled:opacity-30 disabled:cursor-not-allowed"
                         >
                             {modalStage === 'shift_confirm' ? `Confirm ${isCheckIn ? 'Check-In' : 'Check-Out'}` : (isCheckIn ? 'Check In' : (isCheckOut ? 'Check Out' : (editingRequestId ? "Update" : "Submit")))}
                         </button>

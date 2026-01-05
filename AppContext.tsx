@@ -255,10 +255,25 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const finalizeShiftChange = (requestId: string) => {
     const req = requests.find(r => r.id === requestId);
-    if (req && req.shiftChangeDetails) {
-        updateUserShift(req.userId, req.shiftChangeDetails.requestedShift);
+    const targetUser = users.find(u => u.id === req?.userId);
+    const manager = users.find(u => u.id === targetUser?.reportingManagerId);
+
+     if (req && req.shiftChangeDetails) {
+        // Handle multiple assignments if present, otherwise use the base requested shift
+        const targetShift = req.shiftChangeDetails.assignments 
+            ? req.shiftChangeDetails.assignments[req.shiftChangeDetails.assignments.length - 1].shift
+            : req.shiftChangeDetails.requestedShift;
+        
+        // Privilege implementation: Only HR Admin (current context user) can trigger this final update
+        updateUserShift(req.userId, targetShift);
         setRequests(prev => prev.map(r => r.id === requestId ? { ...r, status: RequestStatus.APPROVED } : r));
-        logAudit('Finalized Shift Change', `HR finalized shift change for ${req.userName} to ${req.shiftChangeDetails.requestedShift.name}`);
+        
+        // Notifications Logic: Log Audit for both Resource and Manager
+        logAudit('Notification Sent (Resource)', `Your shift update to ${targetShift.name} has been finalized by HR.`);
+        if (manager) {
+            logAudit('Notification Sent (Manager)', `Shift update for your team member ${req.userName} has been finalized by HR.`);
+        }
+        logAudit('Finalized Shift Change', `HR finalized shift change for ${req.userName} to ${targetShift.name}`);
     }
   };
 
